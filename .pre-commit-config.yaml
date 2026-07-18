@@ -1,0 +1,28 @@
+repos:
+  # Базовые проверки
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace          # убирает пробелы в конце строк
+      - id: end-of-file-fixer            # добавляет перевод строки в конце файла
+      - id: check-yaml                   # валидирует YAML
+      - id: check-toml                   # валидирует pyproject.toml
+      - id: check-added-large-files      # блокирует большие файлы
+        args: ['--maxkb=5000']
+      - id: check-merge-conflict         # ловит незакрытые конфликты
+      - id: detect-private-key           # ловит приватные ключи
+      - id: mixed-line-ending            # унифицирует переносы строк
+
+  # Линтер + форматтер
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Очистка выводов в ноутбуках
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout

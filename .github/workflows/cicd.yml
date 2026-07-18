@@ -1,0 +1,29 @@
+name: CI/CD
+
+on:
+  push:
+     branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ruff-linter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: repo checkout
+        uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: install ruff
+        run: pip install ruff
+
+      - name: check code quality
+        run: ruff check .
+
+      - name: check code format
+        run: ruff format --check
