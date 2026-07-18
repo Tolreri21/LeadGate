@@ -1,0 +1,22 @@
+[project]
+name = "leadgate"
+version = "0.1.0"
+description = "Lead scoring for bank telemarketing (UCI Bank Marketing), served via S3 → Lambda → API Gateway"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "imbalanced-learn>=0.14.2",
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.1",
+    "pandas>=3.0.3",
+    "scikit-learn>=1.9.0",
+    "seaborn>=0.13.2",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "jupyterlab>=4.6.1",
+    "pytest>=9.1.1",
+    "ruff>=0.15.22",
+]
