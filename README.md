@@ -12,9 +12,9 @@ and that absence is the proof, not a corner cut.
 
 - **Task:** binary classification — will a client subscribe to a term deposit after a call.
 - **Unit of observation:** a single contact (the last call of a campaign to a client), not a client.
-- **Target:** `y` (`yes` = subscribed). Positive rate ≈ **`TODO(PR2)`%** — fill from EDA.
+- **Target:** `y` (`yes` = subscribed). Positive rate **11.7%** (5,289 / 45,211).
 - **Metric:** PR-AUC (`average_precision`) + minority-class recall. *Not* accuracy — the
-  "nobody subscribes" constant already scores ≈ **`TODO(PR2)`%**.
+  "nobody subscribes" constant already scores **88.3%**.
 - **Baseline:** `DummyClassifier(strategy="most_frequent")` and `LogisticRegression`.
 - **Threshold:** not 0.5 — tuned on out-of-fold predictions, never on the test set.
 
@@ -57,6 +57,25 @@ From `bank-names.txt` in the archive.
 | `poutcome` | categorical | Outcome of the previous campaign |
 | `y` | target | Subscribed a term deposit? (`yes` / `no`) |
 
+## Key findings (EDA)
+
+- **Class imbalance:** 11.7% positives (5,289 / 45,211) — drives the PR-AUC choice; a constant
+  "no" already scores 88.3% accuracy.
+- **`duration` is a leak → dropped.** The single strongest signal (event rate climbs 0.2% → 45%
+  across deciles, Spearman 0.34), but it's known only *after* the call and the causality is
+  reversed (an interested client causes a long call). Found by hand, then confirmed by the docs.
+- **`pdays` ≈ `previous` (ρ = 0.99).** They share the `-1` "never contacted" sentinel and are
+  collinear → keep `previous`, drop `pdays`.
+- **`unknown` means two different things.** In `poutcome` (81.7%) it's information — "no prior
+  campaign", the same rows as `pdays = -1`; in `education` / `job` it's a genuine missing value.
+- **`balance`** is right-skewed with negative values → `PowerTransformer("yeo-johnson")` (plain
+  `log` fails on negatives).
+- **`age`** is U-shaped (young and senior subscribe more) → binned, not fed raw to a linear model.
+- **`month`** is kept (known before the call) but confounded — three years are collapsed into 12
+  labels, so it isn't clean seasonality.
+
+Full per-feature verdicts and the analysis: `notebooks/01-eda.ipynb`.
+
 ## Layout
 
 ```
@@ -79,5 +98,7 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
 
 ## Status
 
-Work in progress. Numbers marked `TODO(PR2)` are filled from EDA, once derived first-hand
-rather than copied from documentation.
+- **PR1** — project scaffold, CI, dependencies, problem statement. ✅
+- **PR2** — EDA: sanity checks, distributions, event-rate analysis, feature verdicts. ✅
+- **Next (PR3)** — preprocessing + split: the verdicts above become a `ColumnTransformer` /
+  `Pipeline`, `duration` is dropped, and the test set is held out.
