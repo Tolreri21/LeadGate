@@ -76,6 +76,22 @@ From `bank-names.txt` in the archive.
 
 Full per-feature verdicts and the analysis: `notebooks/01-eda.ipynb`.
 
+## Preprocessing (PR3)
+
+Turns the EDA verdicts into a single `ColumnTransformer`, fit on **train only**:
+
+- **Dropped:** `duration` (leakage), `day` (noise), `pdays` (ρ = 0.99 with `previous`).
+- **Cleaned:** 5 rows where `poutcome = unknown` contradicts `previous > 0` → 45,206 rows.
+- **Encoded:** 9 categoricals → `OneHotEncoder(handle_unknown="ignore")`; `age` → 5 quantile
+  bins → OHE (captures the U-shape); `campaign` / `previous` passed through raw.
+- **Transformed:** `balance` → `PowerTransformer("yeo-johnson")` (right-skew with negatives).
+- **Split:** stratified 80/20 (`random_state=42`) — the test set is never touched by any `fit`.
+- **No outlier removal:** extreme values are real; deleting them would bias the model and drop
+  minority-class rows. Skew is handled by the transforms, not by deletion.
+
+Output: **52 features**. The fitted transformer is saved to `models/preprocessor.joblib` for the
+serving pipeline; processed splits go to `data/processed/` (git-ignored, regenerable).
+
 ## Layout
 
 ```
@@ -100,5 +116,7 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
 
 - **PR1** — project scaffold, CI, dependencies, problem statement. ✅
 - **PR2** — EDA: sanity checks, distributions, event-rate analysis, feature verdicts. ✅
-- **Next (PR3)** — preprocessing + split: the verdicts above become a `ColumnTransformer` /
-  `Pipeline`, `duration` is dropped, and the test set is held out.
+- **PR3** — preprocessing + split: verdicts become a `ColumnTransformer`, `duration`/`day`/`pdays`
+  dropped, stratified test set held out, fitted preprocessor saved for serving. ✅
+- **Next (PR4)** — baseline models: `DummyClassifier` + `LogisticRegression` in a `Pipeline`
+  with the preprocessor, scored by PR-AUC on the held-out test set.
