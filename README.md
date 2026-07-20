@@ -110,6 +110,23 @@ the test set is touched exactly once.
 no". The 0.5 threshold is left untouched — tuning it on out-of-fold predictions is a later PR.
 PR curve: `reports/figures/PR-AUC.png`.
 
+## Model comparison (PR5)
+
+Do tree models beat the logistic-regression baseline? Same protocol — 5-fold stratified
+CV on train, PR-AUC, test untouched.
+
+- **RandomForest** (ordinal categoricals, raw numerics): **0.38** — below the LogReg
+  baseline. Trees gain nothing from OHE/binning/scaling, and the signal is too simple for
+  RF to exploit.
+- **HistGradientBoosting** (native categoricals, raw numerics): **0.42** — the strongest,
+  but only marginally above LogReg's **0.40**, and within one CV std.
+- **Light `RandomizedSearchCV` on HGB:** stays ~0.42. Tuning moves nothing; the ~0.42
+  ceiling is confirmed.
+
+**Decision:** keep **LogisticRegression** for serving. At a statistical tie the cheaper,
+faster, interpretable model wins — its held-out test PR-AUC is **0.414** (PR4). HGB's
+marginal edge doesn't justify a heavier, opaque artifact on Lambda.
+
 ## Layout
 
 ```
@@ -120,6 +137,7 @@ notebooks/
   01-eda.ipynb
   02-preprocessing.ipynb
   03-baseline.ipynb
+  04-models.ipynb
 models/         # serialized models
 reports/figures/
 tests/
@@ -139,5 +157,7 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
   dropped, stratified test set held out, fitted preprocessor saved for serving. ✅
 - **PR4** — baseline models: `DummyClassifier` + `LogisticRegression` in a leakage-free
   `Pipeline`, scored by PR-AUC via stratified CV — LogReg **0.40** vs the **0.117** floor. ✅
-- **Next (PR5)** — threshold tuning on out-of-fold predictions and stronger models (tree-based),
-  same PR-AUC protocol.
+- **PR5** — model comparison: RandomForest (**0.38**) and HistGradientBoosting (**0.42**, tuned)
+  vs the LogReg baseline (**0.40**); trees don't clear the bar, LogReg kept for serving. ✅
+- **Next (PR6)** — threshold tuning on out-of-fold predictions to set the operating point, then
+  save the final serving pipeline.
