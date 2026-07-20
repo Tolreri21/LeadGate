@@ -92,6 +92,24 @@ Turns the EDA verdicts into a single `ColumnTransformer`, fit on **train only**:
 Output: **52 features**. The fitted transformer is saved to `models/preprocessor.joblib` for the
 serving pipeline; processed splits go to `data/processed/` (git-ignored, regenerable).
 
+## Baseline models (PR4)
+
+The preprocessor is **rebuilt unfitted** and dropped into a `Pipeline([("preprocessor", ct),
+("model", …)])`, so cross-validation re-fits it inside every fold — no leakage. The saved
+`preprocessor.joblib` is for serving, never for scoring. Metric is PR-AUC (`average_precision`);
+the test set is touched exactly once.
+
+- **Floor — `DummyClassifier("most_frequent")`:** PR-AUC = **0.117**, i.e. the positive rate.
+  Anything at or below this has learned nothing.
+- **`LogisticRegression(class_weight="balanced")`:** PR-AUC = **0.40 ± 0.03** (5-fold stratified
+  CV on train) — **~3.4×** the floor.
+- **Held-out test:** PR-AUC = **0.41**; at the default 0.5 threshold, minority-class recall
+  **0.64** / precision **0.27** — flags most subscribers, but with many false positives.
+
+`class_weight="balanced"` offsets the 11.7% imbalance so the model doesn't collapse to "always
+no". The 0.5 threshold is left untouched — tuning it on out-of-fold predictions is a later PR.
+PR curve: `reports/figures/PR-AUC.png`.
+
 ## Layout
 
 ```
@@ -101,6 +119,7 @@ data/
 notebooks/
   01-eda.ipynb
   02-preprocessing.ipynb
+  03-baseline.ipynb
 models/         # serialized models
 reports/figures/
 tests/
@@ -118,5 +137,7 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
 - **PR2** — EDA: sanity checks, distributions, event-rate analysis, feature verdicts. ✅
 - **PR3** — preprocessing + split: verdicts become a `ColumnTransformer`, `duration`/`day`/`pdays`
   dropped, stratified test set held out, fitted preprocessor saved for serving. ✅
-- **Next (PR4)** — baseline models: `DummyClassifier` + `LogisticRegression` in a `Pipeline`
-  with the preprocessor, scored by PR-AUC on the held-out test set.
+- **PR4** — baseline models: `DummyClassifier` + `LogisticRegression` in a leakage-free
+  `Pipeline`, scored by PR-AUC via stratified CV — LogReg **0.40** vs the **0.117** floor. ✅
+- **Next (PR5)** — threshold tuning on out-of-fold predictions and stronger models (tree-based),
+  same PR-AUC protocol.
