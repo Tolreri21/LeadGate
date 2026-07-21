@@ -127,6 +127,40 @@ CV on train, PR-AUC, test untouched.
 faster, interpretable model wins — its held-out test PR-AUC is **0.414** (PR4). HGB's
 marginal edge doesn't justify a heavier, opaque artifact on Lambda.
 
+## Imbalance handling (PR6)
+
+At 11.7% positives, does reweighting or resampling beat leaving the class ratio alone? Same
+protocol — champion (LogReg), 5-fold stratified CV on train, PR-AUC, test untouched. Resamplers
+sit **inside** an `imblearn.Pipeline`, so they touch only the training folds; the validation fold
+keeps its real 11.7% ratio (resampling it would leak synthetic points into the score).
+
+| Strategy | CV PR-AUC |
+|---|---|
+| None (no reweighting) | **0.402 ± 0.026** |
+| `class_weight="balanced"` | 0.400 ± 0.025 |
+| SMOTE (after one-hot) | 0.398 ± 0.025 |
+| SMOTENC (native categoricals) | 0.357 ± 0.019 |
+
+**None, `class_weight` and SMOTE are a statistical tie** — a 0.004 spread inside one CV std
+(~0.025). SMOTENC is clearly *worse*: to reach 50/50 it synthesises ~4× the minority rows on data
+that is 9 of 13 columns categorical, distorting the decision boundary more than any reweighting
+fixes.
+
+Why resampling buys nothing here: **PR-AUC scores ranking, and imbalance doesn't break ranking —
+it breaks the threshold.** Reweighting and resampling move where the "0.5" line falls, not the
+order of the ranked call list, so a ranking metric can't reward them and the synthetic noise can
+only cost. This is the expected result at a moderate 11.7% (SMOTE earns its keep below ~1%).
+
+**Decision: keep `class_weight="balanced"` — not because it wins PR-AUC (it ties), but because it
+fixes the operating point for free.** Fit on the true ratio, plain LogReg outputs probabilities
+averaging **0.117** — the base rate, well-calibrated, but so low that at threshold 0.5 it flags
+almost nobody (recall ≈ 0). `class_weight="balanced"` inflates them to average **0.41**, making the
+default threshold usable. SMOTE/SMOTENC are rejected: more machinery and synthetic data for a lower
+or equal score. The operating point itself — the real lever for a call list — is tuned on
+out-of-fold predictions in PR7, not here.
+
+Analysis: `notebooks/05-imbalance.ipynb`.
+
 ## Layout
 
 ```
@@ -138,6 +172,7 @@ notebooks/
   02-preprocessing.ipynb
   03-baseline.ipynb
   04-models.ipynb
+  05-imbalance.ipynb
 models/         # serialized models
 reports/figures/
 tests/
@@ -159,5 +194,8 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
   `Pipeline`, scored by PR-AUC via stratified CV — LogReg **0.40** vs the **0.117** floor. ✅
 - **PR5** — model comparison: RandomForest (**0.38**) and HistGradientBoosting (**0.42**, tuned)
   vs the LogReg baseline (**0.40**); trees don't clear the bar, LogReg kept for serving. ✅
-- **Next (PR6)** — threshold tuning on out-of-fold predictions to set the operating point, then
-  save the final serving pipeline.
+- **PR6** — imbalance handling: none / `class_weight` / SMOTE / SMOTENC compared leakage-free in an
+  `imblearn.Pipeline` — all tie on PR-AUC except SMOTENC (**0.357**, worse); resampling rejected,
+  `class_weight="balanced"` kept for the operating point, not for the score. ✅
+- **Next (PR7)** — calibration + threshold tuning on out-of-fold predictions to set the operating
+  point (not 0.5), saved to `threshold.json`.
