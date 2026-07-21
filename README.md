@@ -161,6 +161,45 @@ out-of-fold predictions in PR7, not here.
 
 Analysis: `notebooks/05-imbalance.ipynb`.
 
+## Operating point (PR7)
+
+PR-AUC rates the *ranking*; it says nothing about **where to cut the ranked call list**. That
+cut — the threshold — is the real lever for a call centre, and 0.5 is arbitrary. PR7 sets it from
+business economics on out-of-fold predictions (same 5-fold CV, `cross_val_predict`), test untouched.
+
+**Cost model (illustrative figures):** €100 profit per subscription, €10 per call attempt. For a
+threshold `t`, profit = `TP·100 − calls·10`. Sweep `t`, keep the max.
+
+**`class_weight` dropped — the threshold makes it redundant.** It only ever existed to rescue the
+default 0.5 (PR6). Tuning the threshold explicitly does that job directly, so PR7 switches to
+**plain, unweighted `LogisticRegression`**, which returns *calibrated* probabilities. The two are
+equivalent for the decision: identical ranking (PR6), so the same clients are called for the same
+profit — only the threshold *number* differs (0.11 on the plain scale vs ~0.50 on the balanced one).
+
+| Scenario | Threshold | Calls | Recall | Precision | Profit |
+|---|---|---|---|---|---|
+| Unlimited (economic optimum) | **0.11** | 11,727 (⅓ of leads) | 0.67 | 0.24 | €167k |
+| Capacity 2,000/day (top-N) | ~0.37 | 2,004 | 0.27 | **0.56** | €93k |
+
+Two readings of one ranked list. **Unlimited:** call everyone still profitable — the optimum lands
+at **0.11 ≈ the break-even `c/v` = 0.1**, catching two-thirds of subscribers at precision **0.24**
+(2× the 11.7% base rate). **Under a 2,000-call cap** you skim the top: precision jumps to **0.56** —
+one call in two converts — because when calls are scarce, ranking quality (the PR-AUC of PR5/6) pays
+off directly.
+
+**Policy: floor + capacity.** 0.11 is an *economic floor* — below it each marginal call loses money,
+so never go lower. Capacity decides how far down toward it you reach: `t = max(0.11, top-N cut)`.
+Only the floor is frozen (`models/threshold.json`); the daily call budget is a runtime input.
+
+**Calibration check.** The decision leans on the probability *equalling* the break-even, so plain
+LogReg's calibration is verified on OOF predictions: the reliability curve tracks the diagonal and
+the Brier score is **0.086** — well-calibrated, and notably so around the 0.1 operating region. A
+predicted 0.11 really is a ~11% chance, so the cost-based threshold isn't lying; no
+`CalibratedClassifierCV` needed. Reliability diagram: `reports/figures/calibration.png`.
+
+Threshold **0.11** is frozen and applied once to the held-out test in PR8.
+Analysis: `notebooks/06-threshold.ipynb`.
+
 ## Layout
 
 ```
@@ -173,7 +212,8 @@ notebooks/
   03-baseline.ipynb
   04-models.ipynb
   05-imbalance.ipynb
-models/         # serialized models
+  06-threshold.ipynb
+models/         # serialized models + threshold.json
 reports/figures/
 tests/
 ```
@@ -197,5 +237,9 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
 - **PR6** — imbalance handling: none / `class_weight` / SMOTE / SMOTENC compared leakage-free in an
   `imblearn.Pipeline` — all tie on PR-AUC except SMOTENC (**0.357**, worse); resampling rejected,
   `class_weight="balanced"` kept for the operating point, not for the score. ✅
-- **Next (PR7)** — calibration + threshold tuning on out-of-fold predictions to set the operating
-  point (not 0.5), saved to `threshold.json`.
+- **PR7** — operating point: threshold tuned by profit (€100/subscription, €10/call) on OOF
+  predictions; `class_weight` dropped for a calibrated plain LogReg (Brier **0.086**); economic
+  optimum **0.11** (≈ break-even) with a `max(floor, top-N)` capacity policy, floor frozen to
+  `threshold.json`. ✅
+- **Next (PR8)** — final evaluation on the held-out test (apply the frozen **0.11** once) plus a
+  time-based split as a leakage sanity check.
