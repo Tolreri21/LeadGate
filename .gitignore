@@ -230,3 +230,4 @@ data/raw/*
 # Models
 models/*
 !models/.gitkeep
+!models/threshold.json
