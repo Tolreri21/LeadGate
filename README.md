@@ -200,6 +200,65 @@ predicted 0.11 really is a ~11% chance, so the cost-based threshold isn't lying;
 Threshold **0.11** is frozen and applied once to the held-out test in PR8.
 Analysis: `notebooks/06-threshold.ipynb`.
 
+## Final evaluation (PR8)
+
+The test set — held out in PR3 and untouched since — is scored **once**. PR7's champion (plain
+`LogisticRegression` in the leakage-free `Pipeline`) is fitted on the full training set, the
+threshold is read from `models/threshold.json` rather than retyped, and applied as-is. Nothing was
+tuned after these numbers were seen.
+
+**Test set:** 9,042 leads, 1,057 subscribers — base rate **11.7%**, matching train.
+
+| Ranking metric | CV (train) | Test |
+|---|---|---|
+| PR-AUC | 0.40 | **0.417** |
+| ROC-AUC | — | **0.775** |
+
+**Confusion matrix at t = 0.11:**
+
+|  | predicted: don't call | predicted: call |
+|---|---|---|
+| **actual: no** | 5,741 | 2,244 |
+| **actual: yes** | 330 | **727** |
+
+**Did the operating point survive contact with unseen data?** This is the question PR8 exists to
+answer — the threshold was chosen on out-of-fold predictions, so it could easily have been tuned to
+noise.
+
+| At t = 0.11 | OOF forecast (PR7) | Test (actual) |
+|---|---|---|
+| Calls | 11,727 — 32.4% of leads | 2,971 — **32.9%** |
+| Recall | 0.67 | **0.69** |
+| Precision | 0.24 | **0.24** |
+| Profit per lead | €4.61 | **€4.75** |
+
+**It transferred essentially unchanged.** Same share of the list called, same precision, recall a
+point higher, and **3% more profit per lead than forecast** (€42,990 over 9,042 leads). Absolute
+euros aren't comparable across sets — the test is a quarter the size — so profit is normalised per
+lead. A threshold picked by sweeping OOF predictions is exactly the kind of choice that overfits
+quietly; this one didn't.
+
+**The 2,244 false positives are the design, not a defect.** At 24% precision three in four calls
+are wasted — but a wasted call costs €10 and a caught subscriber earns €100, so the model is
+correctly buying cheap mistakes to avoid expensive misses. Optimising precision here would destroy
+value. The same logic makes overall accuracy (0.72) meaningless: predicting "never call" scores
+88% and earns nothing.
+
+**Why ROC-AUC reads higher than PR-AUC.** With 88% negatives, the true-negative block inflates
+ROC-AUC; PR-AUC ignores it and measures only the ranked call list, which is the thing a call centre
+actually consumes. Both are reported, PR-AUC is the one that governs. Curves:
+`reports/figures/test-PR-AUC.png`, `reports/figures/test-ROC-AUC.png`.
+
+**Scope.** A single stratified random split. `bank-full.csv` is chronologically ordered, so a
+time-based split (train on the early campaign, test on the late) would be the stronger validation
+and would expose any drift the random split hides — it is deliberately out of scope here.
+
+The fitted pipeline is saved to `models/model.joblib` — preprocessing and model in one artifact, so
+serving passes a raw lead in and gets a probability out. It supersedes `models/preprocessor.joblib`
+from PR3.
+
+Analysis: `notebooks/07-evaluation.ipynb`.
+
 ## Layout
 
 ```
@@ -213,7 +272,8 @@ notebooks/
   04-models.ipynb
   05-imbalance.ipynb
   06-threshold.ipynb
-models/         # serialized models + threshold.json
+  07-evaluation.ipynb
+models/         # model.joblib (fitted pipeline) + threshold.json
 reports/figures/
 tests/
 ```
@@ -241,5 +301,8 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
   predictions; `class_weight` dropped for a calibrated plain LogReg (Brier **0.086**); economic
   optimum **0.11** (≈ break-even) with a `max(floor, top-N)` capacity policy, floor frozen to
   `threshold.json`. ✅
-- **Next (PR8)** — final evaluation on the held-out test (apply the frozen **0.11** once) plus a
-  time-based split as a leakage sanity check.
+- **PR8** — final evaluation: the held-out test scored **once** at the frozen **0.11** — recall
+  **0.69**, precision **0.24**, **€4.75/lead** against the €4.61 OOF forecast, so the operating
+  point transferred intact; full pipeline saved to `models/model.joblib`. Time-based validation
+  out of scope. ✅
+- **Next (PR9)** — interpretation: logreg odds ratios and permutation importance on validation.
