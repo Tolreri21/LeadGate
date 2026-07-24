@@ -97,18 +97,18 @@ serving pipeline; processed splits go to `data/processed/` (git-ignored, regener
 The preprocessor is **rebuilt unfitted** and dropped into a `Pipeline([("preprocessor", ct),
 ("model", …)])`, so cross-validation re-fits it inside every fold — no leakage. The saved
 `preprocessor.joblib` is for serving, never for scoring. Metric is PR-AUC (`average_precision`);
-the test set is touched exactly once.
+the test set is not touched here — it is opened once, in PR8.
 
 - **Floor — `DummyClassifier("most_frequent")`:** PR-AUC = **0.117**, i.e. the positive rate.
   Anything at or below this has learned nothing.
 - **`LogisticRegression(class_weight="balanced")`:** PR-AUC = **0.40 ± 0.03** (5-fold stratified
   CV on train) — **~3.4×** the floor.
-- **Held-out test:** PR-AUC = **0.41**; at the default 0.5 threshold, minority-class recall
-  **0.64** / precision **0.27** — flags most subscribers, but with many false positives.
+- **Out-of-fold at the default 0.5 threshold:** minority-class recall **0.63** / precision **0.27**
+  — flags most subscribers, but with many false positives.
 
 `class_weight="balanced"` offsets the 11.7% imbalance so the model doesn't collapse to "always
 no". The 0.5 threshold is left untouched — tuning it on out-of-fold predictions is a later PR.
-PR curve: `reports/figures/PR-AUC.png`.
+PR curve (out-of-fold): `reports/figures/cv-PR-AUC.png`.
 
 ## Model comparison (PR5)
 
@@ -124,8 +124,8 @@ CV on train, PR-AUC, test untouched.
   ceiling is confirmed.
 
 **Decision:** keep **LogisticRegression** for serving. At a statistical tie the cheaper,
-faster, interpretable model wins — its held-out test PR-AUC is **0.414** (PR4). HGB's
-marginal edge doesn't justify a heavier, opaque artifact on Lambda.
+faster, interpretable model wins — **0.40 ± 0.03** against HGB's **~0.42**, both cross-validated
+on train. HGB's marginal edge doesn't justify a heavier, opaque artifact on Lambda.
 
 ## Imbalance handling (PR6)
 
@@ -309,15 +309,20 @@ notebooks/
   05-imbalance.ipynb
   06-threshold.ipynb
   07-evaluation.ipynb
-models/         # model.joblib (fitted pipeline) + threshold.json
+src/leadgate/     # shared helpers, imported by the notebooks and by serving
+  data.py         # load_raw, clean_raw, load_preprocessed
+  pipeline.py     # make_preprocessor, make_cv, make_champion_pipeline
+  threshold.py    # calculate_profit, threshold_sweep, pick_best
+models/           # model.joblib (fitted pipeline) + threshold.json
 reports/figures/
-tests/
+tests/            # pytest suite for src/leadgate
 ```
 
 ## Getting started
 
 ```bash
-uv sync          # install dependencies from pyproject.toml / uv.lock
+uv sync          # install dependencies and the leadgate package itself
+uv run pytest    # run the test suite
 ```
 
 ## Status
@@ -345,5 +350,12 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
   the single strongest and only clearly actionable driver; month dummies dominate the top but read
   as campaign-timing, not a lever. Permutation importance skipped — for a linear champion the
   coefficients already *are* the attribution. ✅
-- **Next (PR10)** — serving: package the fitted pipeline for AWS Lambda (model artifact to S3,
+- **PR10** — shared code + tests: the logic duplicated across the notebooks (split loading, the
+  `ColumnTransformer`, the CV splitter, the champion pipeline, the profit maths) moved into
+  `src/leadgate/`, covered by pytest and wired into CI (ruff + tests on every PR). ✅
+- **PR11** — notebook cleanup: notebooks call `leadgate.*` instead of keeping their own copies
+  (−193 lines), and the held-out test is loaded in `07-evaluation.ipynb` only — PR4 and PR5 now
+  score on out-of-fold predictions. No numbers moved: the splits and `threshold.json` reproduce
+  byte-for-byte. ✅
+- **Next (PR12)** — serving: package the fitted pipeline for AWS Lambda (model artifact to S3,
   container image via ECR).
