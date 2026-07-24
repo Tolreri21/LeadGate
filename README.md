@@ -259,6 +259,42 @@ from PR3.
 
 Analysis: `notebooks/07-evaluation.ipynb`.
 
+## Interpretation (PR9)
+
+The champion is linear, so it explains itself: each fitted coefficient, exponentiated, is an
+**odds ratio** — the multiplicative change in the odds of "subscribes" when that feature is on.
+No SHAP, no surrogate model; for a `LogisticRegression` the coefficients *are* the attribution.
+
+**Top positive drivers (OR > 1):**
+
+| Feature | Odds ratio |
+|---|---|
+| `poutcome = success` | **4.49** |
+| `month = mar` | 3.00 |
+| `month = sep / oct / dec` | 1.87–1.96 |
+| `job = retired` | 1.47 |
+| `contact = cellular` | 1.43 |
+
+**Top negative drivers (OR < 1):** `month = jan` (0.37), `contact = unknown` (0.40),
+`poutcome = failure` (0.48), `housing = yes` (0.63), `loan = yes` (0.69), `default = yes` (0.78).
+
+**The one signal that's both strong and actionable is `poutcome = success`** — a client who took a
+term deposit in a prior campaign has **~4.5× the odds** of subscribing again. It's the model's
+single clearest, causally-sensible lever, and it sits well above every other feature.
+
+**Month is predictive but not a lever.** Five of the ten largest ORs are month dummies, but
+`month` encodes *when past campaigns ran*, not a property of the client — the high-OR months (mar,
+sep, oct, dec) were low-volume, selectively-contacted months, so their lift is selection, not
+seasonal magic. It earns its place in the *ranking* (it's known before the call, so it stays in the
+model) but the interpretation reads it as campaign-timing context, not "dial everyone in March."
+Consistent with the EDA note that three years collapse into 12 labels — this isn't clean seasonality.
+
+**Comparability.** The drivers above are all one-hot dummies (0/1), so their ORs are directly
+comparable. The passthrough numerics (`balance`, `campaign`, `previous`) sit near 1.0 because their
+OR is *per unit* — a different scale, not necessarily weak — and mustn't be ranked against the dummies.
+
+Interpretation shares the evaluation notebook (no separate `08`): `notebooks/07-evaluation.ipynb`.
+
 ## Layout
 
 ```
@@ -305,4 +341,9 @@ uv sync          # install dependencies from pyproject.toml / uv.lock
   **0.69**, precision **0.24**, **€4.75/lead** against the €4.61 OOF forecast, so the operating
   point transferred intact; full pipeline saved to `models/model.joblib`. Time-based validation
   out of scope. ✅
-- **Next (PR9)** — interpretation: logreg odds ratios and permutation importance on validation.
+- **PR9** — interpretation: logreg coefficients read as odds ratios — `poutcome=success` **~4.5×**,
+  the single strongest and only clearly actionable driver; month dummies dominate the top but read
+  as campaign-timing, not a lever. Permutation importance skipped — for a linear champion the
+  coefficients already *are* the attribution. ✅
+- **Next (PR10)** — serving: package the fitted pipeline for AWS Lambda (model artifact to S3,
+  container image via ECR).
