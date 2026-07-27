@@ -1,7 +1,11 @@
+import os
+
 import pandas as pd
 from joblib import load
 import json
 from pathlib import Path
+
+LEADGATE_S3_BUCKET = os.environ.get("LEADGATE_S3_BUCKET")
 
 num_cols = ["age", "balance", "campaign", "previous"]
 cat_cols = [
@@ -20,6 +24,14 @@ MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 
 
 def load_artifacts(models_dir=MODELS_DIR):
+    if LEADGATE_S3_BUCKET:
+        import boto3
+
+        s3 = boto3.client("s3")
+        s3.download_file(LEADGATE_S3_BUCKET, "model.joblib", "/tmp/model.joblib")
+        s3.download_file(LEADGATE_S3_BUCKET, "threshold.json", "/tmp/threshold.json")
+        models_dir = Path("/tmp")
+
     with open(models_dir / "threshold.json") as f:
         threshold = json.load(f)["threshold"]
 
