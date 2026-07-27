@@ -231,3 +231,6 @@ data/raw/*
 models/*
 !models/.gitkeep
 !models/threshold.json
+
+# Test payloads
+lead.json
