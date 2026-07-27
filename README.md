@@ -295,6 +295,50 @@ OR is *per unit* — a different scale, not necessarily weak — and mustn't be 
 
 Interpretation shares the evaluation notebook (no separate `08`): `notebooks/07-evaluation.ipynb`.
 
+## Serving (PR12)
+
+The champion is served as an AWS **Lambda container image** — `LogisticRegression` and its
+preprocessing travel together in `model.joblib`, so the function takes a raw lead and returns a
+decision. sklearn is too large for a Lambda zip, hence the container (base
+`public.ecr.aws/lambda/python:3.12`, pushed to ECR).
+
+**Model delivery.** The fitted pipeline and `threshold.json` sit in S3; the handler pulls them to
+`/tmp` on cold start and caches them for warm invocations. The bucket arrives as the
+`LEADGATE_S3_BUCKET` env var — unset, the same code loads from local `models/`, so dev and tests
+never touch S3. The Lambda role grants only `s3:GetObject` (least privilege).
+
+**Request** — exactly the 13 features the model trained on. `duration`, `day` and `pdays` have no
+field: they were dropped in preprocessing, and `duration`'s absence is the whole point — it can't
+be known before the call, so the contract can't ask for it.
+
+```json
+{ "age": 41, "balance": 1250, "campaign": 2, "previous": 0,
+  "job": "technician", "marital": "married", "education": "secondary",
+  "default": "no", "housing": "yes", "loan": "no",
+  "contact": "cellular", "month": "may", "poutcome": "unknown" }
+```
+
+**Response** — the decision, the probability, and the frozen threshold it was compared against:
+
+```json
+{ "subscribe": false, "probability": 0.083, "threshold": 0.11 }
+```
+
+Bad input fails loud: a missing or unexpected field is a `400`; an unknown category
+(`job: "spaceman"`) is absorbed by `OneHotEncoder(handle_unknown="ignore")` and scored anyway.
+
+**Endpoint.** A Lambda Function URL. Public (`AuthType=NONE`) URLs are blocked by an account-level
+guardrail, so it uses `AuthType=AWS_IAM` and requests are SigV4-signed:
+
+```bash
+curl --aws-sigv4 "aws:amz:us-east-1:lambda" \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  -X POST "$FUNCTION_URL" --data @lead.json
+```
+
+Handler and inference live in `src/leadgate/handler.py` and `src/leadgate/serving.py`; the image
+is built from `Dockerfile`.
+
 ## Layout
 
 ```
@@ -313,9 +357,12 @@ src/leadgate/     # shared helpers, imported by the notebooks and by serving
   data.py         # load_raw, clean_raw, load_preprocessed
   pipeline.py     # make_preprocessor, make_cv, make_champion_pipeline
   threshold.py    # calculate_profit, threshold_sweep, pick_best
+  serving.py      # load_artifacts (local or S3), predict_lead
+  handler.py      # AWS Lambda entrypoint
 models/           # model.joblib (fitted pipeline) + threshold.json
 reports/figures/
 tests/            # pytest suite for src/leadgate
+Dockerfile        # Lambda container image
 ```
 
 ## Getting started
@@ -357,5 +404,6 @@ uv run pytest    # run the test suite
   (−193 lines), and the held-out test is loaded in `07-evaluation.ipynb` only — PR4 and PR5 now
   score on out-of-fold predictions. No numbers moved: the splits and `threshold.json` reproduce
   byte-for-byte. ✅
-- **Next (PR12)** — serving: package the fitted pipeline for AWS Lambda (model artifact to S3,
-  container image via ECR).
+- **PR12** — serving: champion packaged as a Lambda container image (sklearn won't fit a zip), the
+  fitted pipeline + `threshold.json` pulled from S3 on cold start under an `s3:GetObject`-only role;
+  live behind a SigV4-signed Function URL — a raw lead in, `{subscribe, probability, threshold}` out. ✅

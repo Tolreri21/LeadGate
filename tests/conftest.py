@@ -1,6 +1,8 @@
 import pandas as pd
 import pytest
 
+from leadgate.pipeline import make_champion_pipeline
+
 
 @pytest.fixture
 def raw_df():
@@ -36,8 +38,6 @@ def proba():
 
 @pytest.fixture
 def X():
-    # Мини-матрица для make_preprocessor: str-категории (OHE), balance (yeo-johnson,
-    # есть отрицательный), age (KBins n_bins=5 -> нужны разные значения).
     return pd.DataFrame(
         {
             "age": [22, 35, 48, 29, 57, 41, 63, 33],
@@ -69,10 +69,6 @@ def X():
 
 @pytest.fixture
 def sweep_df():
-    # Готовая таблица свипа для тестов pick_best.
-    # money максимален на строке t=0.30 (money=250) -> её ждём без лимита.
-    # n_calls растёт вниз; при max_calls=250 отсекаются две нижние строки,
-    # среди оставшихся лучший money=250 -> та же строка t=0.30.
     return pd.DataFrame(
         {
             "threshold": [0.10, 0.30, 0.50, 0.70],
@@ -82,3 +78,86 @@ def sweep_df():
             "recall": [0.90, 0.70, 0.40, 0.15],
         }
     )
+
+
+@pytest.fixture
+def train_df():
+    return pd.DataFrame(
+        {
+            "age": [22, 35, 48, 29, 57, 41, 63, 33],
+            "balance": [1200, -300, 50, 8000, -50, 420, 15000, 0],
+            "campaign": [1, 3, 2, 1, 5, 2, 1, 4],
+            "previous": [0, 1, 0, 2, 0, 1, 0, 3],
+            "job": [
+                "admin.",
+                "blue-collar",
+                "retired",
+                "student",
+                "admin.",
+                "technician",
+                "retired",
+                "student",
+            ],
+            "marital": [
+                "single",
+                "married",
+                "divorced",
+                "single",
+                "married",
+                "single",
+                "married",
+                "divorced",
+            ],
+            "education": [
+                "secondary",
+                "primary",
+                "tertiary",
+                "secondary",
+                "tertiary",
+                "secondary",
+                "primary",
+                "tertiary",
+            ],
+            "default": ["no", "no", "no", "yes", "no", "no", "no", "no"],
+            "housing": ["yes", "no", "yes", "no", "yes", "no", "yes", "no"],
+            "loan": ["no", "no", "yes", "no", "no", "yes", "no", "no"],
+            "contact": [
+                "cellular",
+                "telephone",
+                "cellular",
+                "unknown",
+                "cellular",
+                "cellular",
+                "telephone",
+                "cellular",
+            ],
+            "month": ["may", "jun", "jul", "aug", "may", "oct", "mar", "nov"],
+            "poutcome": [
+                "unknown",
+                "failure",
+                "success",
+                "unknown",
+                "unknown",
+                "success",
+                "failure",
+                "unknown",
+            ],
+        }
+    )
+
+
+@pytest.fixture
+def y_bin():
+    return pd.Series([0, 1, 1, 0, 1, 0, 1, 0])
+
+
+@pytest.fixture
+def fitted_pipe(train_df, y_bin):
+    pipe = make_champion_pipeline()
+    pipe.fit(train_df, y_bin)
+    return pipe
+
+
+@pytest.fixture
+def lead(train_df):
+    return train_df.iloc[0].to_dict()
