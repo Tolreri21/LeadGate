@@ -8,6 +8,11 @@ rules out the dataset's single strongest predictor — the call's own duration �
 known *after* the call it's supposed to help decide. The API contract has no field for it,
 and that absence is the proof, not a corner cut.
 
+![LeadGate demo: a raw lead in, a call decision out — the same model answers locally and from the live AWS Lambda](docs/demo.gif)
+
+*One raw lead in → a call decision out. The same `model.joblib` returns an identical answer from
+local disk and from the deployed Lambda (SigV4-signed Function URL).*
+
 ## Problem statement
 
 - **Task:** binary classification — will a client subscribe to a term deposit after a call.
@@ -371,39 +376,3 @@ Dockerfile        # Lambda container image
 uv sync          # install dependencies and the leadgate package itself
 uv run pytest    # run the test suite
 ```
-
-## Status
-
-- **PR1** — project scaffold, CI, dependencies, problem statement. ✅
-- **PR2** — EDA: sanity checks, distributions, event-rate analysis, feature verdicts. ✅
-- **PR3** — preprocessing + split: verdicts become a `ColumnTransformer`, `duration`/`day`/`pdays`
-  dropped, stratified test set held out, fitted preprocessor saved for serving. ✅
-- **PR4** — baseline models: `DummyClassifier` + `LogisticRegression` in a leakage-free
-  `Pipeline`, scored by PR-AUC via stratified CV — LogReg **0.40** vs the **0.117** floor. ✅
-- **PR5** — model comparison: RandomForest (**0.38**) and HistGradientBoosting (**0.42**, tuned)
-  vs the LogReg baseline (**0.40**); trees don't clear the bar, LogReg kept for serving. ✅
-- **PR6** — imbalance handling: none / `class_weight` / SMOTE / SMOTENC compared leakage-free in an
-  `imblearn.Pipeline` — all tie on PR-AUC except SMOTENC (**0.357**, worse); resampling rejected,
-  `class_weight="balanced"` kept for the operating point, not for the score. ✅
-- **PR7** — operating point: threshold tuned by profit (€100/subscription, €10/call) on OOF
-  predictions; `class_weight` dropped for a calibrated plain LogReg (Brier **0.086**); economic
-  optimum **0.11** (≈ break-even) with a `max(floor, top-N)` capacity policy, floor frozen to
-  `threshold.json`. ✅
-- **PR8** — final evaluation: the held-out test scored **once** at the frozen **0.11** — recall
-  **0.69**, precision **0.24**, **€4.75/lead** against the €4.61 OOF forecast, so the operating
-  point transferred intact; full pipeline saved to `models/model.joblib`. Time-based validation
-  out of scope. ✅
-- **PR9** — interpretation: logreg coefficients read as odds ratios — `poutcome=success` **~4.5×**,
-  the single strongest and only clearly actionable driver; month dummies dominate the top but read
-  as campaign-timing, not a lever. Permutation importance skipped — for a linear champion the
-  coefficients already *are* the attribution. ✅
-- **PR10** — shared code + tests: the logic duplicated across the notebooks (split loading, the
-  `ColumnTransformer`, the CV splitter, the champion pipeline, the profit maths) moved into
-  `src/leadgate/`, covered by pytest and wired into CI (ruff + tests on every PR). ✅
-- **PR11** — notebook cleanup: notebooks call `leadgate.*` instead of keeping their own copies
-  (−193 lines), and the held-out test is loaded in `07-evaluation.ipynb` only — PR4 and PR5 now
-  score on out-of-fold predictions. No numbers moved: the splits and `threshold.json` reproduce
-  byte-for-byte. ✅
-- **PR12** — serving: champion packaged as a Lambda container image (sklearn won't fit a zip), the
-  fitted pipeline + `threshold.json` pulled from S3 on cold start under an `s3:GetObject`-only role;
-  live behind a SigV4-signed Function URL — a raw lead in, `{subscribe, probability, threshold}` out. ✅
