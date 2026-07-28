@@ -32,6 +32,7 @@ jobs:
 
 
   pytest:
+    needs: [ruff-linter]
     runs-on: ubuntu-latest
     steps:
       - name: repo checkout
@@ -51,3 +52,25 @@ jobs:
 
       - name: run tests
         run: uv run pytest
+
+
+  docker-image:
+    if: github.event_name == 'push'
+    needs: [ruff-linter, pytest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v5
+
+      - name: login
+        uses: docker/login-action@v3
+        with:
+          username: ${{secrets.DOCKERHUB_USERNAME}}
+          password: ${{secrets.DOCKERHUB_TOKEN}}
+
+      - name: build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: tolreri21/leadgate:${{ github.sha }}

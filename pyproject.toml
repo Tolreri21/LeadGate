@@ -1,7 +1,7 @@
 [project]
 name = "leadgate"
 version = "0.1.0"
-description = "Lead scoring for bank telemarketing (UCI Bank Marketing), served via S3 → Lambda → API Gateway"
+description = "Lead scoring for bank telemarketing (UCI Bank Marketing), served via S3 → Lambda → Function URL"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
