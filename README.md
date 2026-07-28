@@ -300,7 +300,7 @@ OR is *per unit* - a different scale, not necessarily weak - and mustn't be rank
 
 Interpretation shares the evaluation notebook (no separate `08`): `notebooks/07-evaluation.ipynb`.
 
-## Serving (PR12)
+## Serving (PR11)
 
 The champion is served as an AWS **Lambda container image** - `LogisticRegression` and its
 preprocessing travel together in `model.joblib`, so the function takes a raw lead and returns a
