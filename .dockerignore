@@ -1,0 +1,27 @@
+# Git
+.git
+.github
+.gitignore
+
+# Python
+.venv
+__pycache__/
+*.py[codz]
+.pytest_cache
+.ruff_cache
+
+# Not needed at runtime
+data/
+models/
+notebooks/
+reports/
+docs/
+tests/
+tmp/
+project_info/
+.idea/
+.pre-commit-config.yaml
+
+# Local junk
+.DS_Store
+lead.json

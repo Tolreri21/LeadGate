@@ -234,3 +234,6 @@ models/*
 
 # Test payloads
 lead.json
+
+# macOS
+.DS_Store
