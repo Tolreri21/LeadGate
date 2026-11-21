@@ -8,10 +8,11 @@ rules out the dataset's single strongest predictor - the call's own duration - w
 known *after* the call it's supposed to help decide. The API contract has no field for it,
 and that absence is the proof, not a corner cut.
 
-![LeadGate demo: a raw lead in, a call decision out - the same model answers locally and from the live AWS Lambda](docs/demo.gif)
+![LeadGate demo: why duration is dropped, a raw lead in and a call decision out, test PR-AUC and the cost-based threshold](docs/demo.gif)
 
-*One raw lead in -> a call decision out. The same `model.joblib` returns an identical answer from
-local disk and from the deployed Lambda (SigV4-signed Function URL).*
+*Why `duration` is dropped, then one raw lead in -> a call decision out, the held-out PR-AUC (0.417 vs
+a 0.117 base rate) and the threshold set from €100 per subscription / €10 per call. With sound:
+[docs/demo.mp4](docs/demo.mp4).*
 
 ## Problem statement
 
